@@ -1,5 +1,5 @@
 //
-// Thread pool
+// Queue
 //
 // Copyright (c) 2015  Dmitry Popov
 //
@@ -23,50 +23,32 @@
 //
 
 #pragma once
-//-------------------------------------------------------------------------------------------------
-#include <vector>
-#include <list>
-#include <thread>
-#include <condition_variable>
-#include <future>
 
-#include "SpinLock.h"
+#include <queue>
 //-------------------------------------------------------------------------------------------------
-class TaskProcessor
+namespace MT
+{
+namespace Structs
+{
+
+template<class T>
+class MTQueue
 {
 public:
-	TaskProcessor();
-	~TaskProcessor();
-
-	template<class T, class... Args>
-	auto Add(T&& t, Args&&... args)
-		-> std::future<typename std::result_of<T(Args...)>::type>
+	MTQueue<T>::MTQueue()
 	{
-		using return_type = typename std::result_of<T(Args...)>::type;
 
-		auto task = std::make_shared<std::packaged_task<return_type()>>
-			(
-				std::bind(std::forward<T>(t), std::forward<Args>(args)...)
-			);
+	}
 
-		auto res = task->get_future();
-		{
-			std::lock_guard<Spinlock> lock(m_TasksLock);
-			m_AllTasks.emplace(m_AllTasks.end(), [task](){ (*task)(); });
-		}
-		m_Notify.notify_one();
+	MTQueue<T>::~MTQueue()
+	{
 
-		return res;
 	}
 
 private:
-	void ExecuteLoop();
-
-	std::list<std::function<void()>> m_AllTasks;
-	Spinlock m_TasksLock;
-
-	bool 							m_Running;
-	std::condition_variable_any		m_Notify;
-	std::vector<std::thread> 		m_Threads;
+	std::queue<T> m_Q;
 };
+
+}
+}
 //-------------------------------------------------------------------------------------------------

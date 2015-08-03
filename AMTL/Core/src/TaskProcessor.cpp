@@ -6,8 +6,7 @@ TaskProcessor::TaskProcessor():
 	m_Running(true)
 {
 	int count = std::thread::hardware_concurrency();
-	if (count == 0)
-		m_Threads.reserve(DEFAULT_THREAD_COUNT);
+	m_Threads.resize((count == 0) ? DEFAULT_THREAD_COUNT : count);
 
 	for (auto &t : m_Threads)
 		t = std::thread([this]{this->ExecuteLoop(); });
