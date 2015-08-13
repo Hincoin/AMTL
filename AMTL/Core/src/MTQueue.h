@@ -1,7 +1,7 @@
 //
 // Queue
 //
-// Copyright (c) 2015  Dmitry Popov
+// Copyright (c) 2015  Alejandro Lucena
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,33 +22,103 @@
 // THE SOFTWARE.
 //
 
-#pragma once
-
-#include <queue>
-//-------------------------------------------------------------------------------------------------
-namespace MT
-{
-namespace Structs
-{
+#include <mutex>
+#include <memory>
 
 template<class T>
 class MTQueue
 {
-public:
-	MTQueue<T>::MTQueue()
-	{
+ private:
+  constexpr static std::size_t CACHE_LINE_SIZE = 64;
+  struct node
+  {
+    std::shared_ptr<T> data;
+    std::unique_ptr<node> next;
+  };
 
+  std::unique_ptr<node> head;
+  node* tail;
+
+  std::mutex head_mut alignas(CACHE_LINE_SIZE);
+  std::mutex tail_mut alignas(CACHE_LINE_SIZE);
+
+  /*
+    get_tail() serves as a convenience function for taking a short
+    lock and returning the current value of tail. Since this is scoped
+    the lock will be released almost immediately.
+
+    get_tail() provides the strong exception safety guarantee
+  */
+  node* get_tail()
+  {
+    std::lock_guard<std::mutex> lock(tail_mut);
+    return tail;
+  }
+
+  /*
+    remove_head() serves as a convenience function 
+    for popping an element off the queue. If the queue
+    is empty, returns nullptr. Otherwise, returns a 
+    unique_ptr to the front of the queue and readjusts
+    the head pointer.
+
+    remove_head provides the strong exception safety guarantee
+  */
+  std::unique_ptr<node> remove_head()
+    {
+      std::lock_guard<std::mutex> lock(head_mut);
+      if(head.get() == get_tail())
+	{
+	  return nullptr;
 	}
 
-	MTQueue<T>::~MTQueue()
-	{
+      std::unique_ptr<node> old_head = std::move(head);
+      head = std::move(old_head->next);
+      return old_head;
+    }
 
-	}
+ public:
+ MTQueue() : head(new node) , tail(head.get()) {}
+  MTQueue(const MTQueue&) = delete;
+  MTQueue& operator=(const MTQueue&) = delete;
 
-private:
-	std::queue<T> m_Q;
+
+  /*
+    push accepts a forwarding-reference to U and attempts to construct
+    a shared_ptr<T> with the argument. If a T cannot be constructed with the given U
+    this function will fail to compile.
+
+    push will push to the tail of the queue in a thread-safe manner without
+    preventing other threads from making progress.
+
+    push() provides the strong exception safety guarantee
+
+  */
+  template<typename U>
+    void push(U val)
+    {
+      std::shared_ptr<T>    new_data(std::make_shared<T>(std::move(val)));
+      std::unique_ptr<node> new_node(new node);
+      node*   new_tail(new_node.get()); 
+      std::lock_guard<std::mutex> lock(tail_mut);
+      
+      tail->data = std::move(new_data);
+      tail->next = std::move(new_node);
+      tail = new_tail;
+    }
+
+  /*
+    pop() attempts to remove the first element from the queue.
+    If the queue is empty, a default-constructed shared_ptr is returned.
+    Otherwise, a shared_ptr to the data is returned.
+
+    pop() provides the strong exception safety guarantee
+
+  */
+  std::shared_ptr<T> pop()
+    {
+      auto old_head = remove_head();
+      return old_head ? old_head->data : std::shared_ptr<T>{} ;
+    }
+
 };
-
-}
-}
-//-------------------------------------------------------------------------------------------------
