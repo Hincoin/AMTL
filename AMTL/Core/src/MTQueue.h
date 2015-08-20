@@ -43,8 +43,8 @@ class MTQueue
   std::mutex tail_mut alignas(CACHE_LINE_SIZE);
 
   /*
-    get_tail() serves as a convenience function for taking a short
-    lock and returning the current value of tail. Since this is scoped
+    get_tail() serves as a convenience function for taking a short lived
+    lock and returning the current value of tail. Since this is scoped,
     the lock will be released almost immediately.
 
     get_tail() provides the strong exception safety guarantee
@@ -88,8 +88,8 @@ class MTQueue
     a shared_ptr<T> with the argument. If a T cannot be constructed with the given U
     this function will fail to compile.
 
-    push will push to the tail of the queue in a thread-safe manner without
-    preventing other threads from making progress.
+    This function pushes to the tail of the queue in a thread-safe manner while still
+    allowing other threads to make progress.
 
     push() provides the strong exception safety guarantee
 
@@ -108,7 +108,7 @@ class MTQueue
     }
 
   /*
-    pop() attempts to remove the first element from the queue.
+    pop() attempts to remove the front element from the queue.
     If the queue is empty, a default-constructed shared_ptr is returned.
     Otherwise, a shared_ptr to the data is returned.
 
